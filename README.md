@@ -1,6 +1,6 @@
 # Orpheus
 
-Orpheus is a unified monitoring dashboard for projects hosted on Cloudflare Workers and Pages, such as Nazkun, Portfolio, and Loom. It brings uptime monitoring, error tracking, performance metrics, incident history, and Telegram alerting into one dashboard.
+Orpheus is a unified monitoring dashboard for multiple web projects. It brings uptime monitoring, error tracking, performance metrics, incident history, and Telegram alerting into one dashboard.
 
 The name comes from the Greek myth of Orpheus, who descended into the underworld to bring back the dead. The monitoring system follows the same metaphor: it detects when a service dies and reports when it comes back to life.
 
@@ -133,7 +133,7 @@ Example project response:
 [
   {
     "id": 1,
-    "name": "Nazkun",
+    "name": "Example Project",
     "url": "https://nazkun.vercel.app",
     "is_up": true,
     "last_checked_at": "2026-09-02T10:30:00Z",
@@ -190,8 +190,8 @@ Orpheus sends short, actionable messages when an incident starts or recovers. A 
 Example:
 
 ```text
-🔴 [Nazkun] Down since 10:32
-URL: https://nazkun.vercel.app
+🔴 [Example Project] Down since 10:32
+URL: https://example.com
 Status: Connection timeout
 ```
 
