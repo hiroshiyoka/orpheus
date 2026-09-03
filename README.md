@@ -134,7 +134,7 @@ Example project response:
   {
     "id": 1,
     "name": "Example Project",
-    "url": "https://nazkun.vercel.app",
+    "url": "https://example.com",
     "is_up": true,
     "last_checked_at": "2026-09-02T10:30:00Z",
     "response_time_ms": 142,
