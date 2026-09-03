@@ -8,19 +8,19 @@ import (
 const defaultCheckIntervalSeconds = 60
 
 type Config struct {
-	TelegramBotToken    string
-	TelegramChatID      string
-	CloudflareAPIToken  string
-	DBPath              string
+	TelegramBotToken     string
+	TelegramChatID       string
+	CloudflareAPIToken   string
+	DBPath               string
 	CheckIntervalSeconds int
 }
 
 func Load() Config {
 	return Config{
-		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramChatID:      os.Getenv("TELEGRAM_CHAT_ID"),
-		CloudflareAPIToken:  os.Getenv("CLOUDFLARE_API_TOKEN"),
-		DBPath:              getEnv("DB_PATH", "./data/orpheus.db"),
+		TelegramBotToken:     os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramChatID:       os.Getenv("TELEGRAM_CHAT_ID"),
+		CloudflareAPIToken:   os.Getenv("CLOUDFLARE_API_TOKEN"),
+		DBPath:               getEnv("DB_PATH", "./data/orpheus.db"),
 		CheckIntervalSeconds: getPositiveInt("CHECK_INTERVAL_SECONDS", defaultCheckIntervalSeconds),
 	}
 }
