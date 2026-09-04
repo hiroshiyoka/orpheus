@@ -241,7 +241,6 @@ GitHub Actions runs on every push and pull request. The pipeline checks:
 - Application build
 - Go vulnerability advisories
 - Exposed secrets with Gitleaks
-- Dependency changes in pull requests
 
 ## Documentation
 
