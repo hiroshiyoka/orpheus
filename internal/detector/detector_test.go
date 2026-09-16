@@ -38,3 +38,35 @@ func TestConsecutiveFailures(t *testing.T) {
 		t.Fatalf("expected false when not enough rows")
 	}
 }
+
+func TestCheckDowntime(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := storage.CreateProject(db, storage.Project{Name: "p", URL: "https://example.com", CheckIntervalSeconds: 60, IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := storage.InsertCheck(db, storage.Check{ProjectID: p.ID, IsUp: false}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	incident, err := CheckDowntime(db, p.ID, 3)
+	if err != nil || incident == nil || incident.Type != "downtime" {
+		t.Fatalf("expected incident, got %v err %v", incident, err)
+	}
+	dup, err := CheckDowntime(db, p.ID, 3)
+	if err != nil || dup != nil {
+		t.Fatalf("expected no duplicate, got %v", dup)
+	}
+	if _, err := storage.InsertCheck(db, storage.Check{ProjectID: p.ID, IsUp: true}); err != nil {
+		t.Fatal(err)
+	}
+	none, err := CheckDowntime(db, p.ID, 3)
+	if err != nil || none != nil {
+		t.Fatalf("expected nil after success")
+	}
+}

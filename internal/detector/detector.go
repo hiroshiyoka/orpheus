@@ -1,6 +1,11 @@
 package detector
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+
+	"github.com/hiroshiyoka/orpheus/internal/storage"
+)
 
 func ConsecutiveFailures(db *sql.DB, projectID int64, n int) (bool, error) {
 	if n <= 0 {
@@ -26,4 +31,24 @@ func ConsecutiveFailures(db *sql.DB, projectID int64, n int) (bool, error) {
 		return false, err
 	}
 	return count == n, nil
+}
+
+func CheckDowntime(db *sql.DB, projectID int64, n int) (*storage.Incident, error) {
+	ok, err := ConsecutiveFailures(db, projectID, n)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var id int64
+	err = db.QueryRow(`SELECT id FROM incidents WHERE project_id = ? AND type = 'downtime' AND resolved_at IS NULL LIMIT 1`, projectID).Scan(&id)
+	if err == nil {
+		return nil, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	incident, err := storage.CreateIncident(db, storage.Incident{ProjectID: projectID, Type: "downtime", StartedAt: time.Now().UTC()})
+	if err != nil {
+		return nil, err
+	}
+	return &incident, nil
 }
