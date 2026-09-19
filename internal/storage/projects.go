@@ -11,15 +11,26 @@ type Project struct {
 	URL                  string
 	CloudflareZoneID     *string
 	CheckIntervalSeconds int
+	FailureThreshold     int
 	IsActive             bool
 	CreatedAt            time.Time
 }
 
+func (p Project) Threshold(fallback int) int {
+	if p.FailureThreshold > 0 {
+		return p.FailureThreshold
+	}
+	if fallback > 0 {
+		return fallback
+	}
+	return 3
+}
+
 func CreateProject(db *sql.DB, project Project) (Project, error) {
 	result, err := db.Exec(`
-		INSERT INTO projects (name, url, cloudflare_zone_id, check_interval_seconds, is_active)
-		VALUES (?, ?, ?, ?, ?)`, project.Name, project.URL, project.CloudflareZoneID,
-		project.CheckIntervalSeconds, project.IsActive)
+		INSERT INTO projects (name, url, cloudflare_zone_id, check_interval_seconds, failure_threshold, is_active)
+		VALUES (?, ?, ?, ?, ?, ?)`, project.Name, project.URL, project.CloudflareZoneID,
+		project.CheckIntervalSeconds, project.FailureThreshold, project.IsActive)
 	if err != nil {
 		return Project{}, err
 	}
@@ -34,23 +45,27 @@ func CreateProject(db *sql.DB, project Project) (Project, error) {
 func GetProject(db *sql.DB, id int64) (Project, error) {
 	var project Project
 	var zoneID sql.NullString
+	var threshold sql.NullInt64
 	err := db.QueryRow(`
-		SELECT id, name, url, cloudflare_zone_id, check_interval_seconds, is_active, created_at
+		SELECT id, name, url, cloudflare_zone_id, check_interval_seconds, failure_threshold, is_active, created_at
 		FROM projects WHERE id = ?`, id).Scan(
 		&project.ID, &project.Name, &project.URL, &zoneID,
-		&project.CheckIntervalSeconds, &project.IsActive, &project.CreatedAt)
+		&project.CheckIntervalSeconds, &threshold, &project.IsActive, &project.CreatedAt)
 	if err != nil {
 		return Project{}, err
 	}
 	if zoneID.Valid {
 		project.CloudflareZoneID = &zoneID.String
 	}
+	if threshold.Valid {
+		project.FailureThreshold = int(threshold.Int64)
+	}
 	return project, nil
 }
 
 func ListProjects(db *sql.DB) ([]Project, error) {
 	rows, err := db.Query(`
-		SELECT id, name, url, cloudflare_zone_id, check_interval_seconds, is_active, created_at
+		SELECT id, name, url, cloudflare_zone_id, check_interval_seconds, failure_threshold, is_active, created_at
 		FROM projects ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -61,12 +76,16 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 	for rows.Next() {
 		var project Project
 		var zoneID sql.NullString
+		var threshold sql.NullInt64
 		if err := rows.Scan(&project.ID, &project.Name, &project.URL, &zoneID,
-			&project.CheckIntervalSeconds, &project.IsActive, &project.CreatedAt); err != nil {
+			&project.CheckIntervalSeconds, &threshold, &project.IsActive, &project.CreatedAt); err != nil {
 			return nil, err
 		}
 		if zoneID.Valid {
 			project.CloudflareZoneID = &zoneID.String
+		}
+		if threshold.Valid {
+			project.FailureThreshold = int(threshold.Int64)
 		}
 		projects = append(projects, project)
 	}
@@ -79,9 +98,9 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 func UpdateProject(db *sql.DB, project Project) error {
 	result, err := db.Exec(`
 		UPDATE projects
-		SET name = ?, url = ?, cloudflare_zone_id = ?, check_interval_seconds = ?, is_active = ?
+		SET name = ?, url = ?, cloudflare_zone_id = ?, check_interval_seconds = ?, failure_threshold = ?, is_active = ?
 		WHERE id = ?`, project.Name, project.URL, project.CloudflareZoneID,
-		project.CheckIntervalSeconds, project.IsActive, project.ID)
+		project.CheckIntervalSeconds, project.FailureThreshold, project.IsActive, project.ID)
 	if err != nil {
 		return err
 	}
