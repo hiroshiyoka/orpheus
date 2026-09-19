@@ -6,6 +6,7 @@ import (
 )
 
 const defaultCheckIntervalSeconds = 60
+const defaultFailureThreshold = 3
 
 type Config struct {
 	TelegramBotToken     string
@@ -13,6 +14,7 @@ type Config struct {
 	CloudflareAPIToken   string
 	DBPath               string
 	CheckIntervalSeconds int
+	FailureThreshold     int
 }
 
 func Load() Config {
@@ -22,6 +24,7 @@ func Load() Config {
 		CloudflareAPIToken:   os.Getenv("CLOUDFLARE_API_TOKEN"),
 		DBPath:               getEnv("DB_PATH", "./data/orpheus.db"),
 		CheckIntervalSeconds: getPositiveInt("CHECK_INTERVAL_SECONDS", defaultCheckIntervalSeconds),
+		FailureThreshold:     getPositiveInt("FAILURE_THRESHOLD", defaultFailureThreshold),
 	}
 }
 
