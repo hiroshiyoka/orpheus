@@ -7,12 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hiroshiyoka/orpheus/internal/detector"
 	"github.com/hiroshiyoka/orpheus/internal/storage"
 )
 
 type Pinger func(url string, timeout time.Duration) storage.Check
 
-func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pinger) {
+func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pinger, failureThreshold int) {
 	var wg sync.WaitGroup
 	for _, project := range projects {
 		if !project.IsActive {
@@ -30,8 +31,20 @@ func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pin
 			store := func() {
 				check := ping(p.URL, 10*time.Second)
 				check.ProjectID = p.ID
-				if _, err := storage.InsertCheck(db, check); err != nil {
+				saved, err := storage.InsertCheck(db, check)
+				if err != nil {
 					log.Printf("check insert failed: %v", err)
+					return
+				}
+				n := p.Threshold(failureThreshold)
+				if !saved.IsUp {
+					if _, err := detector.CheckDowntime(db, p.ID, n); err != nil {
+						log.Printf("downtime check failed: %v", err)
+					}
+				} else {
+					if _, err := detector.ResolveDowntime(db, p.ID, true); err != nil {
+						log.Printf("resolve check failed: %v", err)
+					}
 				}
 			}
 			store()
