@@ -36,7 +36,7 @@ func TestStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		Start(ctx, db, []storage.Project{p}, fakePinger)
+		Start(ctx, db, []storage.Project{p}, fakePinger, 3)
 		close(done)
 	}()
 
