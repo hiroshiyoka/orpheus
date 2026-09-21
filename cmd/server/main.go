@@ -27,5 +27,5 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	collector.Start(ctx, db, projects, collector.Ping, cfg.FailureThreshold)
+	collector.Start(ctx, db, projects, collector.Ping, cfg.FailureThreshold, cfg.TelegramBotToken, cfg.TelegramChatID, nil)
 }

@@ -36,7 +36,7 @@ func TestStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		Start(ctx, db, []storage.Project{p}, fakePinger, 3)
+		Start(ctx, db, []storage.Project{p}, fakePinger, 3, "", "", nil)
 		close(done)
 	}()
 
@@ -51,6 +51,60 @@ func TestStart(t *testing.T) {
 	if len(checks) == 0 {
 		t.Fatal("expected at least one check row")
 	}
+}
+
+func TestStartSendsIncidentAlerts(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := storage.CreateProject(db, storage.Project{Name: "Example", URL: "https://example.com", CheckIntervalSeconds: 1, IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var checks int32
+	fakePinger := func(url string, timeout time.Duration) storage.Check {
+		up := atomic.AddInt32(&checks, 1) > 3
+		return storage.Check{IsUp: up}
+	}
+	alerts := make(chan string, 2)
+	fakeSender := func(botToken, chatID, message string) error {
+		alerts <- message
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		Start(ctx, db, []storage.Project{p}, fakePinger, 3, "token", "chat", fakeSender)
+		close(done)
+	}()
+
+	select {
+	case message := <-alerts:
+		if message != "[Example] Down\nURL: https://example.com" {
+			t.Fatalf("unexpected downtime alert: %q", message)
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		<-done
+		t.Fatal("timed out waiting for downtime alert")
+	}
+	select {
+	case message := <-alerts:
+		if message != "[Example] Recovered\nURL: https://example.com" {
+			t.Fatalf("unexpected recovery alert: %q", message)
+		}
+	case <-time.After(2 * time.Second):
+		cancel()
+		<-done
+		t.Fatal("timed out waiting for recovery alert")
+	}
+	cancel()
+	<-done
 }
 
 func ptrInt(v int) *int { return &v }
