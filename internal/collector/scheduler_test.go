@@ -103,6 +103,13 @@ func TestStartSendsIncidentAlerts(t *testing.T) {
 		<-done
 		t.Fatal("timed out waiting for recovery alert")
 	}
+	var logged int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM alerts_sent WHERE incident_id = 1`).Scan(&logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged != 2 {
+		t.Fatalf("expected two logged alerts, got %d", logged)
+	}
 	cancel()
 	<-done
 }
