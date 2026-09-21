@@ -49,8 +49,15 @@ func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pin
 						log.Printf("downtime check failed: %v", err)
 					} else if incident != nil {
 						message := fmt.Sprintf("[%s] Down\nURL: %s", p.Name, p.URL)
-						if err := sendAlert(botToken, chatID, message); err != nil {
-							log.Printf("telegram alert failed: %v", err)
+						sent, err := storage.AlertSent(db, incident.ID, "telegram", message)
+						if err != nil {
+							log.Printf("alert lookup failed: %v", err)
+						} else if !sent {
+							if err := sendAlert(botToken, chatID, message); err != nil {
+								log.Printf("telegram alert failed: %v", err)
+							} else if err := storage.InsertAlert(db, incident.ID, "telegram", message); err != nil {
+								log.Printf("alert log failed: %v", err)
+							}
 						}
 					}
 				} else {
@@ -59,8 +66,15 @@ func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pin
 						log.Printf("resolve check failed: %v", err)
 					} else if incident != nil {
 						message := fmt.Sprintf("[%s] Recovered\nURL: %s", p.Name, p.URL)
-						if err := sendAlert(botToken, chatID, message); err != nil {
-							log.Printf("telegram alert failed: %v", err)
+						sent, err := storage.AlertSent(db, incident.ID, "telegram", message)
+						if err != nil {
+							log.Printf("alert lookup failed: %v", err)
+						} else if !sent {
+							if err := sendAlert(botToken, chatID, message); err != nil {
+								log.Printf("telegram alert failed: %v", err)
+							} else if err := storage.InsertAlert(db, incident.ID, "telegram", message); err != nil {
+								log.Printf("alert log failed: %v", err)
+							}
 						}
 					}
 				}
