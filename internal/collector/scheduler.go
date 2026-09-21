@@ -3,17 +3,23 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"github.com/hiroshiyoka/orpheus/internal/alerting"
 	"github.com/hiroshiyoka/orpheus/internal/detector"
 	"github.com/hiroshiyoka/orpheus/internal/storage"
 )
 
 type Pinger func(url string, timeout time.Duration) storage.Check
+type AlertSender func(botToken, chatID, message string) error
 
-func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pinger, failureThreshold int) {
+func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pinger, failureThreshold int, botToken, chatID string, sendAlert AlertSender) {
+	if sendAlert == nil {
+		sendAlert = alerting.SendTelegramAlert
+	}
 	var wg sync.WaitGroup
 	for _, project := range projects {
 		if !project.IsActive {
@@ -38,12 +44,24 @@ func Start(ctx context.Context, db *sql.DB, projects []storage.Project, ping Pin
 				}
 				n := p.Threshold(failureThreshold)
 				if !saved.IsUp {
-					if _, err := detector.CheckDowntime(db, p.ID, n); err != nil {
+					incident, err := detector.CheckDowntime(db, p.ID, n)
+					if err != nil {
 						log.Printf("downtime check failed: %v", err)
+					} else if incident != nil {
+						message := fmt.Sprintf("[%s] Down\nURL: %s", p.Name, p.URL)
+						if err := sendAlert(botToken, chatID, message); err != nil {
+							log.Printf("telegram alert failed: %v", err)
+						}
 					}
 				} else {
-					if _, err := detector.ResolveDowntime(db, p.ID, true); err != nil {
+					incident, err := detector.ResolveDowntime(db, p.ID, true)
+					if err != nil {
 						log.Printf("resolve check failed: %v", err)
+					} else if incident != nil {
+						message := fmt.Sprintf("[%s] Recovered\nURL: %s", p.Name, p.URL)
+						if err := sendAlert(botToken, chatID, message); err != nil {
+							log.Printf("telegram alert failed: %v", err)
+						}
 					}
 				}
 			}
