@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -111,6 +112,66 @@ func TestStartSendsIncidentAlerts(t *testing.T) {
 	}
 	if logged != 2 {
 		t.Fatalf("expected two logged alerts, got %d", logged)
+	}
+}
+
+func TestStartContinuesOnAlertFailure(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	p, err := storage.CreateProject(db, storage.Project{Name: "Example", URL: "https://example.com", CheckIntervalSeconds: 1, IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var checks int32
+	fakePinger := func(url string, timeout time.Duration) storage.Check {
+		up := atomic.AddInt32(&checks, 1) > 3
+		return storage.Check{IsUp: up}
+	}
+	fakeSender := func(botToken, chatID, message string) error {
+		return errors.New("telegram down")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		Start(ctx, db, []storage.Project{p}, fakePinger, 3, "token", "chat", fakeSender)
+		close(done)
+	}()
+
+	time.Sleep(6 * time.Second)
+	cancel()
+	<-done
+
+	incidents, err := storage.ListIncidents(db, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(incidents) != 1 {
+		t.Fatalf("expected 1 incident despite alert failure, got %d", len(incidents))
+	}
+	if incidents[0].ResolvedAt == nil {
+		t.Fatalf("expected incident resolved despite alert failure")
+	}
+
+	checksFinal, err := storage.GetChecksByProject(db, p.ID, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(checksFinal) < 4 {
+		t.Fatalf("expected at least 4 checks, got %d", len(checksFinal))
+	}
+
+	var logged int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM alerts_sent`).Scan(&logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged != 0 {
+		t.Fatalf("expected no logged alerts on sender failure, got %d", logged)
 	}
 }
 
