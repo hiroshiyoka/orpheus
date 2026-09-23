@@ -24,6 +24,14 @@ func Open(path, migrationPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	dir := migrationPath
 	if info, err := os.Stat(migrationPath); err == nil && !info.IsDir() {
 		dir = filepath.Dir(migrationPath)
