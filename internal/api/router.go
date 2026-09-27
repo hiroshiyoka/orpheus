@@ -13,6 +13,7 @@ func NewRouter(db *sql.DB) http.Handler {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("/api/projects", handleProjects(db))
+	mux.HandleFunc("/api/projects/", handleProject(db))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
