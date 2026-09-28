@@ -6,12 +6,12 @@ import (
 )
 
 type Incident struct {
-	ID          int64
-	ProjectID   int64
-	Type        string
-	StartedAt   time.Time
-	ResolvedAt  *time.Time
-	Description *string
+	ID          int64      `json:"id"`
+	ProjectID   int64      `json:"project_id"`
+	Type        string     `json:"type"`
+	StartedAt   time.Time  `json:"started_at"`
+	ResolvedAt  *time.Time `json:"resolved_at"`
+	Description *string    `json:"description"`
 }
 
 func CreateIncident(db *sql.DB, incident Incident) (Incident, error) {
@@ -80,6 +80,33 @@ func ListIncidents(db *sql.DB, projectID int64) ([]Incident, error) {
 	}
 	defer rows.Close()
 
+	var incidents []Incident
+	for rows.Next() {
+		incident, err := scanIncident(rows)
+		if err != nil {
+			return nil, err
+		}
+		incidents = append(incidents, incident)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return incidents, nil
+}
+
+func GetIncident(db *sql.DB, id int64) (Incident, error) {
+	return getIncident(db, id)
+}
+
+func ListAllIncidents(db *sql.DB) ([]Incident, error) {
+	rows, err := db.Query(`
+		SELECT id, project_id, type, started_at, resolved_at, description
+		FROM incidents
+		ORDER BY started_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	var incidents []Incident
 	for rows.Next() {
 		incident, err := scanIncident(rows)

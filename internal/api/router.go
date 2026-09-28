@@ -29,6 +29,8 @@ func NewRouter(db *sql.DB) http.Handler {
 		}
 		http.NotFound(w, r)
 	})
+	mux.HandleFunc("/api/incidents", handleIncidents(db))
+	mux.HandleFunc("/api/incidents/", handleIncident(db))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
