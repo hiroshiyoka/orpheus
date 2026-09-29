@@ -6,13 +6,13 @@ import (
 )
 
 type Metric struct {
-	ID            int64
-	ProjectID     int64
-	PeriodStart   time.Time
-	RequestsCount int
-	ErrorCount    int
-	P50ResponseMS *int
-	P99ResponseMS *int
+	ID            int64     `json:"id"`
+	ProjectID     int64     `json:"project_id"`
+	PeriodStart   time.Time `json:"period_start"`
+	RequestsCount int       `json:"requests_count"`
+	ErrorCount    int       `json:"error_count"`
+	P50ResponseMS *int      `json:"p50_response_ms"`
+	P99ResponseMS *int      `json:"p99_response_ms"`
 }
 
 func InsertMetric(db *sql.DB, metric Metric) (Metric, error) {
