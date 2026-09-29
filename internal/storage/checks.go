@@ -6,13 +6,13 @@ import (
 )
 
 type Check struct {
-	ID             int64
-	ProjectID      int64
-	CheckedAt      time.Time
-	IsUp           bool
-	StatusCode     *int
-	ResponseTimeMS *int
-	ErrorMessage   *string
+	ID             int64     `json:"id"`
+	ProjectID      int64     `json:"project_id"`
+	CheckedAt      time.Time `json:"checked_at"`
+	IsUp           bool      `json:"is_up"`
+	StatusCode     *int      `json:"status_code"`
+	ResponseTimeMS *int      `json:"response_time_ms"`
+	ErrorMessage   *string   `json:"error_message"`
 }
 
 func InsertCheck(db *sql.DB, check Check) (Check, error) {

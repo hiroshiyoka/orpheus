@@ -6,14 +6,14 @@ import (
 )
 
 type Project struct {
-	ID                   int64
-	Name                 string
-	URL                  string
-	CloudflareZoneID     *string
-	CheckIntervalSeconds int
-	FailureThreshold     int
-	IsActive             bool
-	CreatedAt            time.Time
+	ID                   int64     `json:"id"`
+	Name                 string    `json:"name"`
+	URL                  string    `json:"url"`
+	CloudflareZoneID     *string   `json:"cloudflare_zone_id"`
+	CheckIntervalSeconds int       `json:"check_interval_seconds"`
+	FailureThreshold     int       `json:"failure_threshold"`
+	IsActive             bool      `json:"is_active"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 func (p Project) Threshold(fallback int) int {
