@@ -2,9 +2,11 @@ package collector
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -106,4 +108,36 @@ func FetchMetricsForProjects(db *sql.DB, token string, since time.Time) ([]stora
 		})
 	}
 	return metrics, nil
+}
+
+func StartCloudflareCollector(ctx context.Context, db *sql.DB, token string, interval time.Duration) {
+	if token == "" {
+		return
+	}
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	collect := func() {
+		since := time.Now().UTC().Add(-interval)
+		metrics, err := FetchMetricsForProjects(db, token, since)
+		if err != nil {
+			log.Printf("cloudflare fetch failed: %v", err)
+			return
+		}
+		for _, m := range metrics {
+			if _, err := storage.InsertMetric(db, m); err != nil {
+				log.Printf("metric insert failed: %v", err)
+			}
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			collect()
+		}
+	}
 }
