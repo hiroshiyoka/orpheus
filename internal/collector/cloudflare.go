@@ -2,10 +2,13 @@ package collector
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/hiroshiyoka/orpheus/internal/storage"
 )
 
 var cloudflareEndpoint = "https://api.cloudflare.com/client/v4/graphql"
@@ -77,4 +80,30 @@ func FetchCloudflareMetrics(token, zoneID string, since time.Time) (int, int, *i
 		p99 = &v
 	}
 	return g.Count, g.Sum.Errors, p50, p99, nil
+}
+
+func FetchMetricsForProjects(db *sql.DB, token string, since time.Time) ([]storage.Metric, error) {
+	projects, err := storage.ListProjects(db)
+	if err != nil {
+		return nil, err
+	}
+	var metrics []storage.Metric
+	for _, p := range projects {
+		if p.CloudflareZoneID == nil || *p.CloudflareZoneID == "" {
+			continue
+		}
+		count, errs, p50, p99, err := FetchCloudflareMetrics(token, *p.CloudflareZoneID, since)
+		if err != nil {
+			return nil, err
+		}
+		metrics = append(metrics, storage.Metric{
+			ProjectID:     p.ID,
+			PeriodStart:   since,
+			RequestsCount: count,
+			ErrorCount:    errs,
+			P50ResponseMS: p50,
+			P99ResponseMS: p99,
+		})
+	}
+	return metrics, nil
 }
