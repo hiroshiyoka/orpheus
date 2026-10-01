@@ -3,8 +3,12 @@ package collector
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hiroshiyoka/orpheus/internal/storage"
 )
 
 func TestFetchCloudflareMetrics(t *testing.T) {
@@ -50,5 +54,42 @@ func TestFetchCloudflareMetricsNoData(t *testing.T) {
 	}
 	if count != 0 || errs != 0 || p50 != nil || p99 != nil {
 		t.Fatalf("expected empty")
+	}
+}
+
+func TestFetchMetricsForProjects(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	zone := "zone-abc"
+	if _, err := storage.CreateProject(db, storage.Project{Name: "with-zone", URL: "https://example.com", CloudflareZoneID: &zone, IsActive: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.CreateProject(db, storage.Project{Name: "without-zone", URL: "https://example.org", IsActive: true}); err != nil {
+		t.Fatal(err)
+	}
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Write([]byte(`{"data":{"viewer":{"zones":[{"httpRequestsAdaptiveGroups":[{"count":50,"sum":{"errors":2},"quantiles":{"p50":80,"p99":200}}]}]}}}`))
+	}))
+	defer server.Close()
+	orig := cloudflareEndpoint
+	cloudflareEndpoint = server.URL
+	defer func() { cloudflareEndpoint = orig }()
+	metrics, err := FetchMetricsForProjects(db, "token", time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(metrics))
+	}
+	if metrics[0].RequestsCount != 50 || metrics[0].ErrorCount != 2 {
+		t.Fatalf("unexpected metric %+v", metrics[0])
+	}
+	if calls != 1 {
+		t.Fatalf("expected 1 call, got %d", calls)
 	}
 }
