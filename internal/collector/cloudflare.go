@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hiroshiyoka/orpheus/internal/alerting"
+	"github.com/hiroshiyoka/orpheus/internal/detector"
 	"github.com/hiroshiyoka/orpheus/internal/storage"
 )
 
@@ -110,9 +112,12 @@ func FetchMetricsForProjects(db *sql.DB, token string, since time.Time) ([]stora
 	return metrics, nil
 }
 
-func StartCloudflareCollector(ctx context.Context, db *sql.DB, token string, interval time.Duration) {
+func StartCloudflareCollector(ctx context.Context, db *sql.DB, token string, interval time.Duration, botToken, chatID string, sendAlert AlertSender) {
 	if token == "" {
 		return
+	}
+	if sendAlert == nil {
+		sendAlert = alerting.SendTelegramAlert
 	}
 	if interval <= 0 {
 		interval = time.Hour
@@ -129,6 +134,46 @@ func StartCloudflareCollector(ctx context.Context, db *sql.DB, token string, int
 		for _, m := range metrics {
 			if _, err := storage.InsertMetric(db, m); err != nil {
 				log.Printf("metric insert failed: %v", err)
+				continue
+			}
+			project, err := storage.GetProject(db, m.ProjectID)
+			if err != nil {
+				continue
+			}
+			if m.RequestsCount > 0 && float64(m.ErrorCount)/float64(m.RequestsCount) > 0.05 {
+				incident, err := detector.CheckErrorSpike(db, m.ProjectID, m.ErrorCount, m.RequestsCount, 0.05)
+				if err != nil {
+					log.Printf("error spike check failed: %v", err)
+				} else if incident != nil {
+					message := fmt.Sprintf("[%s] Error spike\nURL: %s", project.Name, project.URL)
+					sent, err := storage.AlertSent(db, incident.ID, "telegram", message)
+					if err != nil {
+						log.Printf("alert lookup failed: %v", err)
+					} else if !sent {
+						if err := sendAlert(botToken, chatID, message); err != nil {
+							log.Printf("telegram alert failed: %v", err)
+						} else if err := storage.InsertAlert(db, incident.ID, "telegram", message); err != nil {
+							log.Printf("alert log failed: %v", err)
+						}
+					}
+				}
+			} else {
+				incident, err := detector.ResolveErrorSpike(db, m.ProjectID, m.ErrorCount, m.RequestsCount, 0.05)
+				if err != nil {
+					log.Printf("error spike resolve failed: %v", err)
+				} else if incident != nil {
+					message := fmt.Sprintf("[%s] Error recovered\nURL: %s", project.Name, project.URL)
+					sent, err := storage.AlertSent(db, incident.ID, "telegram", message)
+					if err != nil {
+						log.Printf("alert lookup failed: %v", err)
+					} else if !sent {
+						if err := sendAlert(botToken, chatID, message); err != nil {
+							log.Printf("telegram alert failed: %v", err)
+						} else if err := storage.InsertAlert(db, incident.ID, "telegram", message); err != nil {
+							log.Printf("alert log failed: %v", err)
+						}
+					}
+				}
 			}
 		}
 	}

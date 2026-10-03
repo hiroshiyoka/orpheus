@@ -72,3 +72,54 @@ func ResolveDowntime(db *sql.DB, projectID int64, isUp bool) (*storage.Incident,
 	}
 	return &storage.Incident{ID: id, ProjectID: projectID, Type: "downtime", StartedAt: startedAt, ResolvedAt: &now}, nil
 }
+
+func CheckErrorSpike(db *sql.DB, projectID int64, errorCount, requestsCount int, threshold float64) (*storage.Incident, error) {
+	if threshold <= 0 {
+		threshold = 0.05
+	}
+	if requestsCount == 0 {
+		return nil, nil
+	}
+	if float64(errorCount)/float64(requestsCount) <= threshold {
+		return nil, nil
+	}
+	var id int64
+	err := db.QueryRow(`SELECT id FROM incidents WHERE project_id = ? AND type = 'error_spike' AND resolved_at IS NULL LIMIT 1`, projectID).Scan(&id)
+	if err == nil {
+		return nil, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	incident, err := storage.CreateIncident(db, storage.Incident{ProjectID: projectID, Type: "error_spike", StartedAt: time.Now().UTC()})
+	if err != nil {
+		return nil, err
+	}
+	return &incident, nil
+}
+
+func ResolveErrorSpike(db *sql.DB, projectID int64, errorCount, requestsCount int, threshold float64) (*storage.Incident, error) {
+	if threshold <= 0 {
+		threshold = 0.05
+	}
+	if requestsCount == 0 {
+		return nil, nil
+	}
+	if float64(errorCount)/float64(requestsCount) > threshold {
+		return nil, nil
+	}
+	var id int64
+	var startedAt time.Time
+	err := db.QueryRow(`SELECT id, started_at FROM incidents WHERE project_id = ? AND type = 'error_spike' AND resolved_at IS NULL LIMIT 1`, projectID).Scan(&id, &startedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	if err := storage.ResolveIncident(db, id, now); err != nil {
+		return nil, err
+	}
+	return &storage.Incident{ID: id, ProjectID: projectID, Type: "error_spike", StartedAt: startedAt, ResolvedAt: &now}, nil
+}

@@ -114,7 +114,7 @@ func TestStartCloudflareCollector(t *testing.T) {
 	cloudflareEndpoint = server.URL
 	defer func() { cloudflareEndpoint = orig }()
 	ctx, cancel := context.WithCancel(context.Background())
-	go StartCloudflareCollector(ctx, db, "token", 100*time.Millisecond)
+	go StartCloudflareCollector(ctx, db, "token", 100*time.Millisecond, "", "", func(_, _, _ string) error { return nil })
 	time.Sleep(350 * time.Millisecond)
 	cancel()
 	metrics, err := storage.GetMetricsByProject(db, p.ID, time.Time{})
@@ -123,5 +123,66 @@ func TestStartCloudflareCollector(t *testing.T) {
 	}
 	if len(metrics) == 0 {
 		t.Fatal("expected metrics")
+	}
+}
+
+func TestCloudflareErrorSpikeIncident(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	zone := "zone-spike"
+	p, err := storage.CreateProject(db, storage.Project{Name: "spike-project", URL: "https://example.com", CloudflareZoneID: &zone, IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spike int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.LoadInt32(&spike) == 0 {
+			w.Write([]byte(`{"data":{"viewer":{"zones":[{"httpRequestsAdaptiveGroups":[{"count":100,"sum":{"errors":10},"quantiles":{"p50":90,"p99":210}}]}]}}}`))
+		} else {
+			w.Write([]byte(`{"data":{"viewer":{"zones":[{"httpRequestsAdaptiveGroups":[{"count":100,"sum":{"errors":1},"quantiles":{"p50":90,"p99":210}}]}]}}}`))
+		}
+	}))
+	defer server.Close()
+	orig := cloudflareEndpoint
+	cloudflareEndpoint = server.URL
+	defer func() { cloudflareEndpoint = orig }()
+	alerts := make(chan string, 2)
+	sender := func(_, _, msg string) error {
+		alerts <- msg
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go StartCloudflareCollector(ctx, db, "token", 100*time.Millisecond, "bot", "chat", sender)
+	select {
+	case msg := <-alerts:
+		if msg != "[spike-project] Error spike\nURL: https://example.com" {
+			t.Fatalf("unexpected spike alert %q", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for spike alert")
+	}
+	incidents, err := storage.ListAllIncidents(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(incidents) != 1 || incidents[0].Type != "error_spike" {
+		t.Fatalf("expected error_spike incident")
+	}
+	atomic.StoreInt32(&spike, 1)
+	select {
+	case msg := <-alerts:
+		if msg != "[spike-project] Error recovered\nURL: https://example.com" {
+			t.Fatalf("unexpected recovered alert %q", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for recovered alert")
+	}
+	cancel()
+	_, err = storage.GetMetricsByProject(db, p.ID, time.Time{})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
