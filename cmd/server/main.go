@@ -31,7 +31,7 @@ func main() {
 	defer stop()
 
 	go collector.Start(ctx, db, projects, collector.Ping, cfg.FailureThreshold, cfg.TelegramBotToken, cfg.TelegramChatID, nil)
-	go collector.StartCloudflareCollector(ctx, db, cfg.CloudflareAPIToken, time.Hour)
+	go collector.StartCloudflareCollector(ctx, db, cfg.CloudflareAPIToken, time.Hour, cfg.TelegramBotToken, cfg.TelegramChatID, nil)
 
 	router := api.NewRouter(db)
 	srv := &http.Server{Addr: ":8080", Handler: router}

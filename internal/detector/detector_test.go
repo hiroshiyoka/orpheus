@@ -120,3 +120,61 @@ func TestResolveDowntime(t *testing.T) {
 		t.Fatalf("expected nil when not up")
 	}
 }
+
+func TestCheckErrorSpike(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := storage.CreateProject(db, storage.Project{Name: "p", URL: "https://example.com", IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	none, err := CheckErrorSpike(db, p.ID, 2, 100, 0.05)
+	if err != nil || none != nil {
+		t.Fatalf("expected nil for 2%%")
+	}
+	inc, err := CheckErrorSpike(db, p.ID, 6, 100, 0.05)
+	if err != nil || inc == nil || inc.Type != "error_spike" {
+		t.Fatalf("expected error_spike, got %v", inc)
+	}
+	dup, err := CheckErrorSpike(db, p.ID, 6, 100, 0.05)
+	if err != nil || dup != nil {
+		t.Fatalf("expected no duplicate")
+	}
+	zero, err := CheckErrorSpike(db, p.ID, 0, 0, 0.05)
+	if err != nil || zero != nil {
+		t.Fatalf("expected nil for zero requests")
+	}
+}
+
+func TestResolveErrorSpike(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "orpheus.db"), filepath.Join("..", "..", "migrations", "0001_init.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p, err := storage.CreateProject(db, storage.Project{Name: "p", URL: "https://example.com", IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CheckErrorSpike(db, p.ID, 10, 100, 0.05); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := ResolveErrorSpike(db, p.ID, 1, 100, 0.05)
+	if err != nil || resolved == nil || resolved.ResolvedAt == nil {
+		t.Fatalf("expected resolved")
+	}
+	none, err := ResolveErrorSpike(db, p.ID, 1, 100, 0.05)
+	if err != nil || none != nil {
+		t.Fatalf("expected nil when no active")
+	}
+	if _, err := CheckErrorSpike(db, p.ID, 10, 100, 0.05); err != nil {
+		t.Fatal(err)
+	}
+	still, err := ResolveErrorSpike(db, p.ID, 10, 100, 0.05)
+	if err != nil || still != nil {
+		t.Fatalf("expected nil when still spiking")
+	}
+}
