@@ -12,11 +12,13 @@
   "dependencies": {
     "@cloudflare/kumo": "^2.14.0",
     "@phosphor-icons/react": "^2.1.10",
+    "echarts": "^6.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
