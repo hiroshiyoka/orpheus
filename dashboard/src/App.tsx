@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react"
 import { Badge, LayerCard } from "@cloudflare/kumo"
+import { useEffect, useState } from "react"
+import { getJson } from "./api"
+import ProjectDetail from "./ProjectDetail"
 
 type Project = {
   id: number
@@ -11,39 +13,61 @@ type Project = {
   uptime_24h_percent: number
 }
 
-export default function App() {
+function Overview() {
   const [projects, setProjects] = useState<Project[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/projects")
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status))
-        return r.json()
-      })
-      .then(setProjects)
-      .catch((e) => setError(String(e)))
+    getJson<Project[]>("/api/projects").then(setProjects).catch((e) => setError(String(e)))
   }, [])
 
-  if (error) return <div>{error}</div>
+  if (error) return <div style={{ padding: 24 }}>{error}</div>
 
   return (
     <div style={{ padding: 24 }}>
       <h1>Orpheus Overview</h1>
-      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", marginTop: 16 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 16,
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          marginTop: 16,
+        }}
+      >
         {projects.map((p) => (
-          <LayerCard key={p.id} title={p.name}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Badge>{p.is_up ? "Up" : "Down"}</Badge>
-              <span>{p.url}</span>
-            </div>
-            <div>Response: {p.response_time_ms ?? "-"} ms</div>
-            <div>Uptime 24h: {p.uptime_24h_percent}%</div>
-            <div>Last check: {p.last_checked_at ? new Date(p.last_checked_at).toLocaleString() : "-"}</div>
-          </LayerCard>
+          <a key={p.id} href={`#/projects/${p.id}`}>
+            <LayerCard>
+              <LayerCard.Secondary>{p.name}</LayerCard.Secondary>
+              <LayerCard.Primary>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Badge variant={p.is_up ? "green" : "red"}>{p.is_up ? "Up" : "Down"}</Badge>
+                  <span>{p.url}</span>
+                </div>
+                <div>Response: {p.response_time_ms ?? "-"} ms</div>
+                <div>Uptime 24h: {p.uptime_24h_percent}%</div>
+                <div>
+                  Last check: {p.last_checked_at ? new Date(p.last_checked_at).toLocaleString() : "-"}
+                </div>
+              </LayerCard.Primary>
+            </LayerCard>
+          </a>
         ))}
       </div>
       {projects.length === 0 && <div>No projects</div>}
     </div>
   )
+}
+
+export default function App() {
+  const [hash, setHash] = useState(() => window.location.hash)
+
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash)
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
+  }, [])
+
+  const match = /^#\/projects\/(\d+)$/.exec(hash)
+  if (match) return <ProjectDetail projectId={Number(match[1])} />
+  return <Overview />
 }
