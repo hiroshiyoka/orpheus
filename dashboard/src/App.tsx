@@ -19,7 +19,10 @@ function Overview() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getJson<Project[]>("/api/projects").then(setProjects).catch((e) => setError(String(e)))
+    const load = () => getJson<Project[]>("/api/projects").then(setProjects).catch((e) => setError(String(e)))
+    load()
+    const id = setInterval(load, 30000)
+    return () => clearInterval(id)
   }, [])
 
   if (error) return <div style={{ padding: 24 }}>{error}</div>
