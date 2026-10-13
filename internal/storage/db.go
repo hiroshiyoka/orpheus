@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -45,13 +46,33 @@ func Open(path, migrationPath string) (*sql.DB, error) {
 	if len(migrations) == 0 {
 		migrations = []string{migrationPath}
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	for _, m := range migrations {
+		name := filepath.Base(m)
+		var applied int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&applied); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if applied > 0 {
+			continue
+		}
 		data, err := os.ReadFile(m)
 		if err != nil {
 			db.Close()
 			return nil, err
 		}
 		if _, err := db.Exec(string(data)); err != nil {
+			// ponytail: tolerate re-running ADD COLUMN on DBs created before tracking existed
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				db.Close()
+				return nil, err
+			}
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
 			db.Close()
 			return nil, err
 		}
